@@ -1,4 +1,3 @@
-
 Thanks for [Xiaoxi Wang](http://www.sysu-hcp.net/home/) providing contributions.
 
 # Important notice:
