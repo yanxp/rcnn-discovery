@@ -70,7 +70,6 @@ def _get_bbox_regression_labels(bbox_target_data, num_classes):
       bbox_inside_weights (ndarray): N x 4K blob of loss weights
   """
   # Inputs are tensor
-
   clss = bbox_target_data[:, 0]
   bbox_targets = clss.new(clss.numel(), 4 * num_classes).zero_()
   bbox_inside_weights = clss.new(bbox_targets.shape).zero_()
@@ -79,6 +78,7 @@ def _get_bbox_regression_labels(bbox_target_data, num_classes):
     clss = clss[inds].contiguous().view(-1,1)
     dim1_inds = inds.unsqueeze(1).expand(inds.size(0), 4)
     dim2_inds = torch.cat([4*clss, 4*clss+1, 4*clss+2, 4*clss+3], 1).long()
+  #  print('dim:',dim1_inds,dim2_inds)
     bbox_targets[dim1_inds, dim2_inds] = bbox_target_data[inds][:, 1:]
     bbox_inside_weights[dim1_inds, dim2_inds] = bbox_targets.new(cfg.TRAIN.BBOX_INSIDE_WEIGHTS).view(-1, 4).expand_as(dim1_inds)
 

@@ -174,6 +174,7 @@ class SolverWrapper(object):
     stepsizes = list(cfg.TRAIN.STEPSIZE)
 
     return lr, last_snapshot_iter, stepsizes, np_paths, ss_paths
+#  def reset_model(self, sfile, nfile):
 
   def restore(self, sfile, nfile):
     # Get the most recent snapshot and restore
@@ -207,7 +208,10 @@ class SolverWrapper(object):
       # where the naming tradition for checkpoints are different
       os.remove(str(sfile))
       ss_paths.remove(sfile)
-
+  def update_roidb(self,roidb,valroidb):
+   #   roidb = fliter_roidb(roidb)
+      self.roidb = roidb
+      self.valroidb = valroidb
   def train_model(self, max_iters):
     # Build data layers for both training and validation set
     self.data_layer = RoIDataLayer(self.roidb, self.imdb.num_classes)
@@ -225,6 +229,7 @@ class SolverWrapper(object):
     else:
       lr, last_snapshot_iter, stepsizes, np_paths, ss_paths = self.restore(str(sfiles[-1]), 
                                                                              str(nfiles[-1]))
+    print('last_snapshot_iter:{}'.format(last_snapshot_iter))
     iter = last_snapshot_iter + 1
     last_summary_time = time.time()
     # Make sure the lists are not empty
@@ -234,7 +239,7 @@ class SolverWrapper(object):
 
     self.net.train()
     self.net.cuda()
-
+    print('iter:{},max_iters:{}'.format(iter,max_iters+1))
     while iter < max_iters + 1:
       # Learning rate
       if iter == next_stepsize + 1:
@@ -249,20 +254,24 @@ class SolverWrapper(object):
       blobs = self.data_layer.forward()
 
       now = time.time()
-      if iter == 1 or now - last_summary_time > cfg.TRAIN.SUMMARY_INTERVAL:
-        # Compute the graph with summary
-        rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss, summary = \
-          self.net.train_step_with_summary(blobs, self.optimizer)
-        for _sum in summary: self.writer.add_summary(_sum, float(iter))
-        # Also check the summary on the validation set
-        blobs_val = self.data_layer_val.forward()
-        summary_val = self.net.get_summary(blobs_val)
-        for _sum in summary_val: self.valwriter.add_summary(_sum, float(iter))
-        last_summary_time = now
-      else:
-        # Compute the graph without summary
-        rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss = \
-          self.net.train_step(blobs, self.optimizer)
+      
+      rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss = \
+      self.net.train_step(blobs, self.optimizer)
+     
+     # if iter == 1 or now - last_summary_time > cfg.TRAIN.SUMMARY_INTERVAL:
+     #   # Compute the graph with summary
+     #   rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss, summary = \
+     #     self.net.train_step_with_summary(blobs, self.optimizer)
+     #   for _sum in summary: self.writer.add_summary(_sum, float(iter))
+     #   # Also check the summary on the validation set
+     #   blobs_val = self.data_layer_val.forward()
+     #   summary_val = self.net.get_summary(blobs_val)
+     #   for _sum in summary_val: self.valwriter.add_summary(_sum, float(iter))
+     #   last_summary_time = now
+     # else:
+     #   # Compute the graph without summary
+     #   rpn_loss_cls, rpn_loss_box, loss_cls, loss_box, total_loss = \
+     #     self.net.train_step(blobs, self.optimizer)
       utils.timer.timer.toc()
 
       # Display training information

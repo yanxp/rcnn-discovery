@@ -242,7 +242,7 @@ class Network(nn.Module):
 
     # change it so that the score has 2 as its channel size
     rpn_cls_score_reshape = rpn_cls_score.view(1, 2, -1, rpn_cls_score.size()[-1]) # batch * 2 * (num_anchors*h) * w
-    rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape)
+    rpn_cls_prob_reshape = F.softmax(rpn_cls_score_reshape,dim=1)
     
     # Move channel to the last dimenstion, to fit the input of python functions
     rpn_cls_prob = rpn_cls_prob_reshape.view_as(rpn_cls_score).permute(0, 2, 3, 1) # batch * h * w * (num_anchors * 2)
@@ -277,7 +277,7 @@ class Network(nn.Module):
   def _region_classification(self, fc7):
     cls_score = self.cls_score_net(fc7)
     cls_pred = torch.max(cls_score, 1)[1]
-    cls_prob = F.softmax(cls_score)
+    cls_prob = F.softmax(cls_score,dim=1)
     bbox_pred = self.bbox_pred_net(fc7)
 
     self._predictions["cls_score"] = cls_score
@@ -392,7 +392,7 @@ class Network(nn.Module):
     self._mode = mode
 
     rois, cls_prob, bbox_pred = self._predict()
-
+    
     if mode == 'TEST':
       stds = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_STDS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)
       means = bbox_pred.data.new(cfg.TRAIN.BBOX_NORMALIZE_MEANS).repeat(self._num_classes).unsqueeze(0).expand_as(bbox_pred)
@@ -487,12 +487,22 @@ class Network(nn.Module):
     self._losses['total_loss'].backward()
     train_op.step()
     self.delete_intermediate_states()
-
+  def load_testing_state_dict(self,state_dict):
+      '''overwrite test mode to load_state_dict'''
+      nn.Module.load_state_dict(self, {k: state_dict[k] for k in list(self.state_dict())})
+  
   def load_state_dict(self, state_dict):
     """
     Because we remove the definition of fc layer in resnet now, it will fail when loading 
     the model trained before.
     To provide back compatibility, we overwrite the load_state_dict
     """
-    nn.Module.load_state_dict(self, {k: state_dict[k] for k in list(self.state_dict())})
+    import copy
+    #nn.Module.load_state_dict(self, {k: state_dict[k] for k in list(self.state_dict())})
 
+    wf = copy.deepcopy(state_dict)
+    for k in self.state_dict():
+        if ((not k in wf)) | (k=='cls_score_net.weight')|(k=='cls_score_net.bias')|(k=='bbox_pred_net.weight')|(k=='bbox_pred_net.bias'):
+            wf[k] = self.state_dict()[k]
+
+    nn.Module.load_state_dict(self, {k: wf[k] for k in list(self.state_dict())})

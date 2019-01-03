@@ -39,22 +39,31 @@ def parse_args():
   parser.add_argument('--num_dets', dest='max_per_image',
             help='max number of detections per image',
             default=100, type=int)
+  parser.add_argument('--num_classes',dest='num_classes',help='the num classes for testing',default=21,type=int)
+
   parser.add_argument('--tag', dest='tag',
                         help='tag of the model',
                         default='', type=str)
   parser.add_argument('--net', dest='net',
-                      help='vgg16, res50, res101, res152, mobile',
+                  help='vgg16, res50, res101, res152, mobile',
                       default='res50', type=str)
   parser.add_argument('--set', dest='set_cfgs',
                         help='set config keys', default=None,
                         nargs=argparse.REMAINDER)
-
+ 
   if len(sys.argv) == 1:
     parser.print_help()
     sys.exit(1)
 
   args = parser.parse_args()
   return args
+
+classes = ('__background__',  # always index 0
+            'aeroplane', 'bicycle', 'bird', 'boat',
+            'bottle', 'bus', 'car', 'cat', 'chair',
+            'cow', 'diningtable', 'dog', 'horse',
+            'motorbike', 'person', 'pottedplant',
+            'sheep', 'sofa', 'train', 'tvmonitor')
 
 if __name__ == '__main__':
   args = parse_args()
@@ -84,6 +93,9 @@ if __name__ == '__main__':
   imdb = get_imdb(args.imdb_name)
   imdb.competition_mode(args.comp_mode)
 
+  # set select classes
+  imdb.set_classes(classes[args.num_classes])
+
   # load network
   if args.net == 'vgg16':
     net = vgg16()
@@ -108,7 +120,7 @@ if __name__ == '__main__':
 
   if args.model:
     print(('Loading model check point from {:s}').format(args.model))
-    net.load_state_dict(torch.load(args.model))
+    net.load_testing_state_dict(torch.load(args.model))
     print('Loaded.')
   else:
     print(('Loading initial weights from {:s}').format(args.weight))

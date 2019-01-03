@@ -8,7 +8,7 @@ from __future__ import division
 from __future__ import print_function
 
 import _init_paths
-from model.train_val import get_training_roidb, train_net
+from model.train_val import get_training_roidb, train_net,SolverWrapper
 from model.config import cfg, cfg_from_file, cfg_from_list, get_output_dir, get_output_tb_dir
 from datasets.factory import get_imdb
 import datasets.imdb
@@ -44,6 +44,8 @@ def parse_args():
   parser.add_argument('--tag', dest='tag',
                       help='tag of the model',
                       default=None, type=str)
+  parser.add_argument('--classes_schedule',dest='classes_scheldule',
+          help='list classes num for incremental learning',default=[(0,21)],type=list)
   parser.add_argument('--net', dest='net',
                       help='vgg16, res50, res101, res152, mobile',
                       default='res50', type=str)
@@ -78,11 +80,21 @@ def combined_roidb(imdb_names):
     for r in roidbs[1:]:
       roidb.extend(r)
     tmp = get_imdb(imdb_names.split('+')[1])
-    imdb = datasets.imdb.imdb(imdb_names, tmp.classes)
+    imdb = datasets.imdb.imdb(imdb_names, tmp.classes) # only to visit name and classes
   else:
     imdb = get_imdb(imdb_names)
   return imdb, roidb
 
+classes = ('__background__',  # always index 0
+            'aeroplane', 'bicycle', 'bird', 'boat',
+            'bottle', 'bus', 'car', 'cat', 'chair',
+            'cow', 'diningtable', 'dog', 'horse',
+            'motorbike', 'person', 'pottedplant',
+            'sheep', 'sofa', 'train', 'tvmonitor')
+
+def fliter_class_roidb(roidb,classes_length): # 只要有新类别的图片都不要...
+    roidb = [ x for x in roidb if max(x['gt_classes'])<classes_length]
+    return roidb
 
 if __name__ == '__main__':
   args = parse_args()
@@ -102,6 +114,9 @@ if __name__ == '__main__':
 
   # train set
   imdb, roidb = combined_roidb(args.imdb_name)
+  orgimdb = imdb
+  orgroidb = roidb
+
   print('{:d} roidb entries'.format(len(roidb)))
 
   # output directory where the models are saved
@@ -116,7 +131,9 @@ if __name__ == '__main__':
   orgflip = cfg.TRAIN.USE_FLIPPED
   cfg.TRAIN.USE_FLIPPED = False
   _, valroidb = combined_roidb(args.imdbval_name)
-  print('{:d} validation roidb entries'.format(len(valroidb)))
+  #fliter select classe valset
+  orgvalroidb = valroidb
+
   cfg.TRAIN.USE_FLIPPED = orgflip
 
   # load network
@@ -132,7 +149,34 @@ if __name__ == '__main__':
     net = mobilenetv1()
   else:
     raise NotImplementedError
-    
-  train_net(net, imdb, roidb, valroidb, output_dir, tb_dir,
-            pretrained_model=args.weight,
-            max_iters=args.max_iters)
+
+  init_train_iters = 20000
+  iters_sum = init_train_iters
+  # reset train datasets
+  imdb.set_classes(classes[:args.classes_list[0]])
+  roidb = fliter_class_roidb(orgroidb,args.classes_list[0])
+  print(imdb.num_classes)
+  print(imdb._classes)
+  print('imdb num_images:',imdb.num_images)
+  print('roidb number:',len(roidb))
+  # reset val datasets
+  valroidb = fliter_class_roidb(orgvalroidb,args.classes_list[0])
+  print('{:d} validation roidb entries'.format(len(valroidb)))
+  # initialize Solverwrapper Object
+  sw = SolverWrapper(net,imdb,roidb,valroidb,output_dir,tb_dir,pretrained_model=args.weight)
+  sw.train_model(iters_sum)
+
+  for i in range(1,len(args.classes_list)):
+      curr_classes = classes[:args.classes_list[i]]
+      imdb.set_classes(curr_classes)
+      roidb = fliter_class_roidb(orgroidb,args.classes_list[i])
+      print(imdb.num_classes)
+      print(imdb._classes)
+      print('imdb num_images:',imdb.num_images)
+      print('roidb number:',len(roidb))
+      valroidb = fliter_class_roidb(orgvalroidb,args.classes_list[i])
+      print('{:d} validation roidb entries'.format(len(valroidb)))
+      iters_sum = min(args.max_iters,iters_sum+20000)
+      sw.update_roidb(roidb,valroidb)
+      sw.train_model(iters_sum)
+
